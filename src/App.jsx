@@ -1,35 +1,83 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { useState, useEffect } from "react";
+import PokemonList from "./PokemonList";
+import Pagination from "./Pagination";
+import axios from "axios";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [pokemon, setPokemon] = useState([]);
+  const [currentPageUrl, setCurrentPageUrl] = useState(
+    "https://pokeapi.co/api/v2/pokemon"
+  );
+  const [nextPageUrl, setNextPageUrl] = useState();
+  const [prevPageUrl, setPrevPageUrl] = useState();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancel;
+    let isMounted = true;
+
+    setLoading(true);
+
+    axios
+      .get(currentPageUrl, {
+        cancelToken: new axios.CancelToken((c) => (cancel = c)),
+      })
+      .then((res) => {
+        if (isMounted) {
+          setLoading(false);
+          setNextPageUrl(res.data.next);
+          setPrevPageUrl(res.data.previous);
+
+          const fetchDetails = res.data.results.map((p) =>
+            axios.get(p.url).then((detailsRes) => ({
+              name: p.name,
+              sprite: detailsRes.data.sprites.front_default,
+            }))
+          );
+
+          Promise.all(fetchDetails).then((details) => {
+            if (isMounted) {
+              setPokemon(details);
+            }
+          });
+        }
+      })
+      .catch((error) => {
+        if (isMounted && axios.isCancel(error)) {
+          console.log("Request canceled", error.message);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      cancel();
+    };
+  }, [currentPageUrl]);
+
+  function gotoNextPage() {
+    setCurrentPageUrl(nextPageUrl);
+  }
+
+  function gotoPrevPage() {
+    setCurrentPageUrl(prevPageUrl);
+  }
+
+  if (loading)
+    return (
+      <div className="w-full h-screen grid place-items-center select-none">
+        Loading...
+      </div>
+    );
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div className="flex">
+      <Pagination
+        gotoNextPage={nextPageUrl ? gotoNextPage : null}
+        gotoPrevPage={prevPageUrl ? gotoPrevPage : null}
+      />
+      <PokemonList pokemon={pokemon} />
+    </div>
+  );
 }
 
-export default App
+export default App;
